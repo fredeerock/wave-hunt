@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Face Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --arena: #2438D6;
+    --navy: #141C6B;
+    --navy-2: #1B2585;
+    --gold: #FFC93C;
+    --coral: #FF6B6B;
+    --mint: #2EE6A6;
+    --white: #FFFFFF;
+    --ink: #0E1446;
+    --muted: #AEB8FF;
+    --display: "Bungee", "Arial Black", Impact, sans-serif;
+    --body: "Rubik", system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,.10) 1.5px, transparent 0) 0 0 / 22px 22px,
+      var(--arena);
+    color: var(--white);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.45;
+    min-height: 100vh;
+    padding: 20px 24px 28px;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; }
+  button:focus-visible { outline: 4px solid var(--white); outline-offset: 3px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+    max-width: 1400px; margin: 0 auto 18px;
+  }
+  .brand h1 {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(40px, 6vw, 76px); line-height: .95; margin: 0;
+    color: var(--gold);
+    text-shadow: 4px 4px 0 var(--navy), 8px 8px 0 rgba(20,28,107,.35);
+    letter-spacing: .01em;
+  }
+  .brand p { margin: 10px 0 0; max-width: 46ch; color: var(--white); font-size: 18px; }
+
+  .counter {
+    background: var(--navy); border-radius: 22px; padding: 12px 22px 14px;
+    display: flex; align-items: center; gap: 16px; box-shadow: 0 8px 0 rgba(14,20,70,.55);
+  }
+  .counter .num {
+    font-family: var(--display); font-size: 72px; line-height: 1; color: var(--gold);
+    min-width: 1.2ch; text-align: center; transition: transform .15s;
+  }
+  .counter .num.bump { transform: scale(1.25); }
+  .counter .label { font-size: 18px; line-height: 1.2; }
+  .counter .label b { display: block; font-size: 22px; }
+
+  /* ---------- layout ---------- */
+  main {
+    max-width: 1400px; margin: 0 auto;
+    display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 24px; align-items: start;
+  }
+
+  /* ---------- the TV ---------- */
+  .tv {
+    position: relative; border-radius: 30px; overflow: hidden;
+    border: 8px solid var(--white); background: #000;
+    box-shadow: 0 12px 0 var(--navy);
+    aspect-ratio: 4 / 3;
+  }
+  .tv img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tv .thirds { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); pointer-events: none; }
+  .tv .thirds span { border-right: 2px dashed rgba(255,255,255,.28); }
+  .tv .thirds span:last-child { border-right: 0; }
+  .tv .nosignal {
+    position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 8px;
+    background: repeating-linear-gradient(45deg, #1a1a2e 0 14px, #20203a 14px 28px);
+    font-size: 20px; padding: 24px;
+  }
+  .tv .nosignal strong { font-family: var(--display); font-size: 34px; font-weight: 400; color: var(--gold); }
+  .banner {
+    position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+    width: max-content; max-width: calc(100% - 40px);
+    background: var(--gold); color: var(--ink); border-radius: 18px;
+    padding: 12px 26px 14px; text-align: center;
+    box-shadow: 0 6px 0 var(--navy);
+  }
+  .banner .big { font-family: var(--display); font-size: clamp(26px, 3.6vw, 46px); line-height: 1.05; }
+  .banner .small { font-weight: 500; font-size: 18px; margin-top: 4px; }
+  .banner.pop { animation: pop .45s cubic-bezier(.2, 1.6, .4, 1); }
+  @keyframes pop { from { transform: translateX(-50%) scale(.6); } to { transform: translateX(-50%) scale(1); } }
+  .banner[data-tone="party"] { background: var(--mint); }
+  .banner[data-tone="sad"] { background: var(--coral); }
+  .banner[data-tone="stop"] { background: var(--white); }
+
+  .scanbeam {
+    position: absolute; top: 0; bottom: 0; width: 33.34%; pointer-events: none;
+    background: linear-gradient(180deg, rgba(255,201,60,.0), rgba(255,201,60,.22));
+    border: 4px solid var(--gold); border-radius: 18px; transition: left .4s ease; display: none;
+  }
+
+  /* ---------- teams ---------- */
+  .teams { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 26px; }
+  .team {
+    --c: var(--white);
+    position: relative; background: var(--navy); border-radius: 22px; padding: 16px 18px 18px;
+    border-top: 12px solid var(--c);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .team[data-team="left"] { --c: var(--coral); }
+  .team[data-team="center"] { --c: var(--gold); }
+  .team[data-team="right"] { --c: var(--mint); }
+  .team h2 { font-family: var(--display); font-weight: 400; font-size: 26px; margin: 0; color: var(--c); line-height: 1.1; }
+  .team .where { color: var(--muted); font-size: 15px; margin: 2px 0 10px; }
+  .team .row { display: flex; align-items: end; justify-content: space-between; gap: 10px; }
+  .team .seen { font-family: var(--display); font-size: 56px; line-height: .9; }
+  .team .seen small { font-family: var(--body); font-size: 15px; font-weight: 500; display: block; color: var(--muted); margin-top: 6px; }
+  .team .wins { text-align: right; }
+  .team .stars { font-size: 26px; color: var(--c); letter-spacing: 2px; min-height: 1.2em; word-break: break-all; }
+  .team .wins span { color: var(--muted); font-size: 15px; }
+  .team.scanning { transform: translateY(-6px); box-shadow: 0 0 0 4px var(--gold); }
+  .team.winner { transform: translateY(-8px) rotate(-1.5deg); box-shadow: 0 0 0 5px var(--c), 0 14px 0 rgba(14,20,70,.55); }
+  .team .crown {
+    display: none; position: absolute; top: -34px; right: 14px; background: var(--c); color: var(--ink);
+    font-family: var(--display); font-size: 16px; padding: 4px 12px; border-radius: 10px;
+  }
+  .team.winner .crown { display: block; }
+
+  /* ---------- controls ---------- */
+  aside { display: grid; gap: 16px; }
+  .panel { background: var(--navy); border-radius: 22px; padding: 16px; }
+  .panel h3 { margin: 0 0 10px; font-size: 16px; font-weight: 700; color: var(--muted); }
+
+  .go {
+    width: 100%; background: var(--gold); color: var(--ink);
+    font-family: var(--display); font-size: 34px; padding: 18px 10px 20px; border-radius: 22px;
+    box-shadow: 0 8px 0 #B98500; transition: transform .08s, box-shadow .08s;
+  }
+  .go:active:not(:disabled) { transform: translateY(6px); box-shadow: 0 2px 0 #B98500; }
+  .stop {
+    width: 100%; background: var(--coral); color: var(--white);
+    font-family: var(--display); font-size: 30px; padding: 14px 10px 16px; border-radius: 22px;
+    box-shadow: 0 8px 0 #B83C3C; transition: transform .08s, box-shadow .08s;
+  }
+  .stop:active { transform: translateY(6px); box-shadow: 0 2px 0 #B83C3C; }
+  .stop small, .go small { display: block; font-family: var(--body); font-size: 14px; font-weight: 500; opacity: .85; }
+
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 500; }
+  .switch { width: 64px; height: 36px; border-radius: 99px; background: #3A438F; position: relative; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 4px; left: 4px; width: 28px; height: 28px; border-radius: 50%; background: var(--white); transition: left .2s; }
+  .switch[aria-checked="true"] { background: var(--mint); }
+  .switch[aria-checked="true"]::after { left: 32px; }
+
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .pad button, .chips button {
+    background: var(--navy-2); border-radius: 14px; padding: 12px 6px; font-weight: 700; font-size: 16px;
+    box-shadow: inset 0 0 0 2px #3A438F;
+  }
+  .pad button { font-size: 22px; padding: 10px 0; }
+  .pad button:active, .pad button.held, .chips button:active { background: var(--gold); color: var(--ink); box-shadow: none; }
+  .pad .fwd { grid-column: 2; }
+  .pad .lft { grid-column: 1; grid-row: 2; }
+  .pad .bck { grid-column: 2; grid-row: 2; }
+  .pad .rgt { grid-column: 3; grid-row: 2; }
+  .chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .chips.two { grid-template-columns: repeat(2, 1fr); }
+  .hint { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+
+  .status { display: flex; flex-wrap: wrap; gap: 8px; font-size: 14px; }
+  .pill { padding: 5px 12px; border-radius: 99px; background: var(--navy-2); font-weight: 500; }
+  .pill::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; background: var(--coral); vertical-align: 1px; }
+  .pill.on::before { background: var(--mint); }
+  .pill.plain::before { display: none; }
+  .linkish { background: none; color: var(--muted); text-decoration: underline; padding: 0; font-size: 14px; }
+
+  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+
+  @media (max-width: 1000px) {
+    main { grid-template-columns: 1fr; }
+    header { flex-direction: column; align-items: flex-start; }
+  }
+  @media (max-width: 560px) {
+    body { padding: 14px 16px 24px; }
+    .teams { grid-template-columns: 1fr; }
+    .counter .num { font-size: 52px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<canvas id="confetti"></canvas>
+
+<header>
+  <div class="brand">
+    <h1>Face Hunt</h1>
+    <p>The robot walks toward whichever team it sees the most faces in. Get your whole team in its view!</p>
+  </div>
+  <div class="counter" aria-live="polite">
+    <div class="num" id="faceNum">0</div>
+    <div class="label"><b id="faceWord">faces</b>in view right now</div>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="tv">
+      <img id="video" src="/video" alt="Live view from the robot's camera with faces boxed">
+      <div class="thirds"><span></span><span></span><span></span></div>
+      <div class="scanbeam" id="beam"></div>
+      <div class="nosignal" id="nosignal" hidden>
+        <strong>No camera yet</strong>
+        <span>Check that this laptop is on the robot's Wi-Fi and the robot is switched on.</span>
+      </div>
+      <div class="banner" id="banner" data-tone="idle">
+        <div class="big" id="bannerBig">Ready</div>
+        <div class="small" id="bannerSmall">Press START to begin the hunt</div>
+      </div>
+    </div>
+
+    <div class="teams">
+      <article class="team" data-team="left">
+        <div class="crown">Winner</div>
+        <h2>Team Coral</h2>
+        <p class="where">Stand on the robot's left</p>
+        <div class="row">
+          <div class="seen"><span data-count>?</span><small>faces seen</small></div>
+          <div class="wins"><div class="stars" data-stars></div><span data-wins>0 wins</span></div>
+        </div>
+      </article>
+      <article class="team" data-team="center">
+        <div class="crown">Winner</div>
+        <h2>Team Gold</h2>
+        <p class="where">Stand right in front</p>
+        <div class="row">
+          <div class="seen"><span data-count>?</span><small>faces seen</small></div>
+          <div class="wins"><div class="stars" data-stars></div><span data-wins>0 wins</span></div>
+        </div>
+      </article>
+      <article class="team" data-team="right">
+        <div class="crown">Winner</div>
+        <h2>Team Mint</h2>
+        <p class="where">Stand on the robot's right</p>
+        <div class="row">
+          <div class="seen"><span data-count>?</span><small>faces seen</small></div>
+          <div class="wins"><div class="stars" data-stars></div><span data-wins>0 wins</span></div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <aside>
+    <button class="go" id="go">Start hunt<small>or press Enter</small></button>
+    <button class="stop" id="stop">Stop<small>or press Space</small></button>
+
+    <div class="panel">
+      <div class="toggle">
+        <span>Keep playing rounds automatically</span>
+        <button class="switch" id="auto" role="switch" aria-checked="false" aria-label="Auto-play"></button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Drive the robot (hold a button or arrow key)</h3>
+      <div class="pad">
+        <button class="fwd" data-drive="forward" aria-label="Walk forward">▲</button>
+        <button class="lft" data-drive="left" aria-label="Turn left">◀</button>
+        <button class="bck" data-drive="back" aria-label="Walk backward">▼</button>
+        <button class="rgt" data-drive="right" aria-label="Turn right">▶</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Point the head</h3>
+      <div class="chips">
+        <button data-look="left">Left</button>
+        <button data-look="center">Middle</button>
+        <button data-look="right">Right</button>
+      </div>
+      <h3 style="margin-top:14px">Do a move</h3>
+      <div class="chips two">
+        <button data-action="wave">Wave</button>
+        <button data-action="greet">Bow</button>
+        <button data-action="twist">Dance</button>
+        <button data-action="stand">Stand up</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="status">
+        <span class="pill" id="pRobot">Robot</span>
+        <span class="pill" id="pCam">Camera</span>
+        <span class="pill plain" id="pBatt" hidden></span>
+        <span class="pill" id="pSound">Sound off</span>
+      </div>
+      <p class="hint"><button class="linkish" id="reset">Reset the scoreboard</button></p>
+    </div>
+  </aside>
+</main>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const TEAM_NAME = { left: "Coral", center: "Gold", right: "Mint" };
+const BEAM_LEFT = { left: "0%", center: "33.33%", right: "66.66%" };
+
+/* ---------------- websocket ---------------- */
+let ws, last = {};
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = e => render(JSON.parse(e.data));
+  ws.onclose = () => { render({ ...last, robot: false, camera: false, _offline: true }); setTimeout(connect, 1000); };
+}
+const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+connect();
+
+/* ---------------- rendering ---------------- */
+const BANNERS = {
+  idle:     s => ["Ready", s.message, "idle"],
+  manual:   s => ["Driving", s.message, "idle"],
+  scanning: s => [`Looking ${s.scan_zone === "center" ? "ahead" : s.scan_zone || ""}`, "Wave and smile so it can see you!", "idle"],
+  picked:   s => [`Team ${TEAM_NAME[s.winner]}!`, s.message, "party"],
+  turning:  s => ["Turning", s.message, "idle"],
+  walking:  s => ["Here I come!", s.message, "idle"],
+  party:    s => [`Team ${TEAM_NAME[s.winner]} wins!`, "Point to the winners!", "party"],
+  sad:      s => ["Nobody here?", s.message, "sad"],
+};
+
+function render(s) {
+  const prev = last; last = s;
+
+  // big face counter
+  const n = s.faces ?? 0;
+  $("#faceNum").textContent = n;
+  $("#faceWord").textContent = n === 1 ? "face" : "faces";
+  if (n > (prev.faces ?? 0)) { bump($("#faceNum")); if (s.state === "idle") sfx.tick(); }
+
+  // banner
+  let [big, small, tone] = (BANNERS[s.state] || BANNERS.idle)(s);
+  if (s._offline) [big, small, tone] = ["Offline", "The Face Hunt server isn't running. Start it with: uv run app.py", "sad"];
+  else if (!s.robot) [big, small, tone] = ["Robot offline", "Join the robot's Wi-Fi and make sure the robot is on", "sad"];
+  if (s.state === "idle" && /^Stopped/.test(s.message || "")) tone = "stop";
+  const banner = $("#banner");
+  if ($("#bannerBig").textContent !== big) { banner.classList.remove("pop"); void banner.offsetWidth; banner.classList.add("pop"); }
+  $("#bannerBig").textContent = big;
+  $("#bannerSmall").textContent = small || "";
+  banner.dataset.tone = tone;
+
+  // scan beam over the video
+  const beam = $("#beam");
+  beam.style.display = s.state === "scanning" && s.scan_zone ? "block" : "none";
+  if (s.scan_zone) beam.style.left = BEAM_LEFT[s.scan_zone];
+
+  // teams
+  for (const el of document.querySelectorAll(".team")) {
+    const t = el.dataset.team;
+    const c = s.zone_counts?.[t];
+    $("[data-count]", el).textContent = c == null ? "?" : c;
+    const w = s.scores?.[t] ?? 0;
+    $("[data-stars]", el).textContent = "★".repeat(Math.min(w, 12));
+    $("[data-wins]", el).textContent = `${w} ${w === 1 ? "win" : "wins"}`;
+    el.classList.toggle("scanning", s.state === "scanning" && s.scan_zone === t);
+    el.classList.toggle("winner", !!s.winner && s.winner === t && ["picked", "turning", "walking", "party"].includes(s.state));
+  }
+
+  // controls
+  const busy = ["scanning", "picked", "turning", "walking", "party", "sad"].includes(s.state);
+  $("#go").disabled = busy || !s.robot;
+  document.querySelectorAll("[data-drive],[data-look],[data-action]").forEach(b => b.disabled = busy || !s.robot);
+  $("#auto").setAttribute("aria-checked", s.auto ? "true" : "false");
+
+  // status
+  $("#pRobot").classList.toggle("on", !!s.robot);
+  $("#pRobot").textContent = s.robot ? "Robot connected" : "Robot offline";
+  $("#pCam").classList.toggle("on", !!s.camera);
+  $("#pCam").textContent = s.camera ? `Camera ${s.fps} fps` : "No camera";
+  $("#nosignal").hidden = !!s.camera;
+  if (s.battery) { $("#pBatt").hidden = false; $("#pBatt").textContent = `Battery ${s.battery.toFixed(1)} V`; }
+
+  // sound + confetti on state changes
+  if (s.scan_zone && s.scan_zone !== prev.scan_zone) sfx.blip(s.scan_zone);
+  if (s.state !== prev.state) {
+    if (s.state === "picked") sfx.fanfare();
+    if (s.state === "party") { sfx.fanfare(); confetti(); }
+    if (s.state === "sad") sfx.sad();
+  }
+}
+
+function bump(el) { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); setTimeout(() => el.classList.remove("bump"), 160); }
+
+/* ---------------- controls ---------------- */
+$("#go").onclick = () => { sfx.unlock(); send({ cmd: "start" }); };
+$("#stop").onclick = () => { sfx.unlock(); send({ cmd: "stop" }); };
+$("#auto").onclick = () => { sfx.unlock(); send({ cmd: "auto", on: $("#auto").getAttribute("aria-checked") !== "true" }); };
+$("#reset").onclick = () => send({ cmd: "reset_scores" });
+document.querySelectorAll("[data-look]").forEach(b => b.onclick = () => send({ cmd: "look", where: b.dataset.look }));
+document.querySelectorAll("[data-action]").forEach(b => b.onclick = () => send({ cmd: "action", name: b.dataset.action }));
+
+// hold-to-drive: re-send every 200 ms; the server stops the robot when we go quiet
+let driveTimer = null, driveBtn = null;
+function startDrive(move, btn) {
+  if (driveTimer || (btn && btn.disabled)) return;
+  sfx.unlock();
+  driveBtn = btn; btn && btn.classList.add("held");
+  send({ cmd: "drive", move });
+  driveTimer = setInterval(() => send({ cmd: "drive", move }), 200);
+}
+function endDrive() {
+  clearInterval(driveTimer); driveTimer = null;
+  driveBtn && driveBtn.classList.remove("held"); driveBtn = null;
+}
+document.querySelectorAll("[data-drive]").forEach(b => {
+  b.addEventListener("pointerdown", e => { e.preventDefault(); startDrive(b.dataset.drive, b); });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => b.addEventListener(ev, endDrive));
+});
+window.addEventListener("blur", endDrive);
+
+const KEYS = { ArrowUp: "forward", ArrowDown: "back", ArrowLeft: "left", ArrowRight: "right" };
+document.addEventListener("keydown", e => {
+  if (e.code === "Space") { e.preventDefault(); endDrive(); $("#stop").click(); }
+  else if (e.key === "Enter" && document.activeElement === document.body) { e.preventDefault(); $("#go").click(); }
+  else if (KEYS[e.key]) { e.preventDefault(); if (!e.repeat) startDrive(KEYS[e.key], $(`[data-drive="${KEYS[e.key]}"]`)); }
+});
+document.addEventListener("keyup", e => { if (KEYS[e.key]) endDrive(); });
+
+/* ---------------- sound (Web Audio, no files) ---------------- */
+const sfx = (() => {
+  let ctx = null;
+  const tone = (freq, start, dur, type = "square", vol = 0.08) => {
+    if (!ctx) return;
+    const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + start;
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + dur);
+  };
+  return {
+    unlock() {
+      if (ctx) return;
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      $("#pSound").textContent = "Sound on"; $("#pSound").classList.add("on");
+    },
+    tick() { tone(1200, 0, 0.06, "triangle", 0.05); },
+    blip(zone) { const f = { left: 520, center: 660, right: 780 }[zone] || 600; tone(f, 0, 0.12); tone(f * 1.5, 0.12, 0.12); },
+    fanfare() { [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.11, 0.22, "square", 0.07)); tone(1047, 0.48, 0.5, "triangle", 0.08); },
+    sad() { [392, 370, 349, 311].forEach((f, i) => tone(f, i * 0.28, 0.32, "sawtooth", 0.05)); },
+  };
+})();
+$("#pSound").onclick = () => sfx.unlock();
+$("#pSound").style.cursor = "pointer";
+
+/* ---------------- confetti ---------------- */
+function confetti() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cv = $("#confetti"), cx = cv.getContext("2d");
+  cv.width = innerWidth; cv.height = innerHeight;
+  const colors = ["#FFC93C", "#FF6B6B", "#2EE6A6", "#FFFFFF"];
+  const bits = Array.from({ length: 180 }, () => ({
+    x: innerWidth / 2 + (Math.random() - .5) * 200, y: innerHeight * .55,
+    vx: (Math.random() - .5) * 18, vy: -Math.random() * 20 - 8,
+    r: Math.random() * Math.PI, vr: (Math.random() - .5) * .4,
+    w: 8 + Math.random() * 8, h: 5 + Math.random() * 6, c: colors[(Math.random() * 4) | 0],
+  }));
+  const t0 = performance.now();
+  (function frame(now) {
+    cx.clearRect(0, 0, cv.width, cv.height);
+    for (const b of bits) {
+      b.vy += .55; b.vx *= .99; b.x += b.vx; b.y += b.vy; b.r += b.vr;
+      cx.save(); cx.translate(b.x, b.y); cx.rotate(b.r); cx.fillStyle = b.c; cx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); cx.restore();
+    }
+    if (now - t0 < 3500) requestAnimationFrame(frame); else cx.clearRect(0, 0, cv.width, cv.height);
+  })(t0);
+}
+
+// if the video stream breaks, reconnect it
+$("#video").onerror = () => setTimeout(() => { $("#video").src = "/video?" + Date.now(); }, 1000);
+</script>
+</body>
+</html>
