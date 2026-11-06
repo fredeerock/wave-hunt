@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import logging
+import socket
 import threading
 import time
 import webbrowser
@@ -11,6 +12,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from game import Game
 from robot import Robot
@@ -27,10 +29,29 @@ parser.add_argument("--host", default="127.0.0.1",
 parser.add_argument("--no-browser", action="store_true")
 args, _ = parser.parse_known_args()
 
+
+def allowed_hosts():
+    """Host names the game may be opened by. Anything else (e.g. a DNS-rebinding site) is refused."""
+    hosts = {"localhost", "127.0.0.1"}
+    if args.host not in ("127.0.0.1", "localhost"):
+        if args.host != "0.0.0.0":
+            hosts.add(args.host)
+        try:  # this laptop's address on the robot's network
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect((args.robot, 9090))
+            hosts.add(s.getsockname()[0])
+            s.close()
+        except OSError:
+            pass
+    return sorted(hosts)
+
+
+ALLOWED_HOSTS = allowed_hosts()
 robot = Robot(args.robot)
 vision = Vision(args.robot, str(HERE / "models" / "face_detection_yunet_2023mar.onnx"))
 game = Game(robot, vision)
 app = FastAPI()
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
 
 @app.get("/")
@@ -53,8 +74,9 @@ def video():
 @app.websocket("/ws")
 async def ws(sock: WebSocket):
     # Only our own page may drive the robot: reject connections opened by other websites.
+    # (The Host header was already checked against ALLOWED_HOSTS by the middleware.)
     origin = sock.headers.get("origin", "")
-    if origin.split("://", 1)[-1] != sock.headers.get("host", ""):
+    if origin != f"http://{sock.headers.get('host', '')}":
         await sock.close(code=1008)
         return
     await sock.accept()
