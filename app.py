@@ -22,6 +22,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)-7s %(message
 parser = argparse.ArgumentParser()
 parser.add_argument("--robot", default="192.168.149.1", help="robot IP address")
 parser.add_argument("--port", type=int, default=8000)
+parser.add_argument("--host", default="127.0.0.1",
+                    help="address to serve on; use 0.0.0.0 to let other devices open the game (they can drive the robot)")
 parser.add_argument("--no-browser", action="store_true")
 args, _ = parser.parse_known_args()
 
@@ -50,6 +52,11 @@ def video():
 
 @app.websocket("/ws")
 async def ws(sock: WebSocket):
+    # Only our own page may drive the robot: reject connections opened by other websites.
+    origin = sock.headers.get("origin", "")
+    if origin.split("://", 1)[-1] != sock.headers.get("host", ""):
+        await sock.close(code=1008)
+        return
     await sock.accept()
 
     async def push():
@@ -92,7 +99,7 @@ if __name__ == "__main__":
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
     try:
-        uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="warning")
+        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     finally:
         print("Stopping robot...")
         robot.stop()

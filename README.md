@@ -19,6 +19,10 @@ each time the robot comes to them.
 The first run needs internet to install Python packages; after that it works offline.
 To use a robot at a different address: `uv run app.py --robot 192.168.149.1`.
 
+The game only opens on this laptop. To open it from another device (say, a tablet), run
+`uv run app.py --host 0.0.0.0` and visit `http://<laptop-ip>:8000`. Anyone who can reach
+that address can drive the robot, so only do this on a network you trust.
+
 ## Playing
 
 - Split the room into three teams: **Coral** stands on the robot's left, **Gold** in front,
