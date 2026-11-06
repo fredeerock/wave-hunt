@@ -22,6 +22,12 @@ class Vision:
                                              score_threshold=0.7, nms_threshold=0.3, top_k=50)
         self.frame = None
         self.faces = []        # list of (x, y, w, h, score) in pixels
+        self.motion = 0.0      # fraction of the picture that moved since the last frame (0..1)
+        self.motion_live = 0.0 # smoothed version for the on-screen meter
+        self.motion_mask = None
+        self.tint_zone = None  # 0/1/2 to color all motion in one team's color
+        self._prev_small = None
+        self._acc_sum, self._acc_n = 0.0, 0
         self.size = (640, 480)
         self.stamp = 0.0
         self.fps = 0.0
@@ -55,12 +61,44 @@ class Vision:
         self.det.setInputSize((w, h))
         _, raw = self.det.detect(img)
         faces = [] if raw is None else [(int(f[0]), int(f[1]), int(f[2]), int(f[3]), float(f[14])) for f in raw]
+        motion, mask = self._measure_motion(img)
         now = time.time()
         with self.cond:
             if self.stamp:
                 self.fps = 0.9 * self.fps + 0.1 / max(now - self.stamp, 1e-3)
             self.frame, self.faces, self.size, self.stamp = img, faces, (w, h), now
+            self.motion, self.motion_mask = motion, mask
+            self.motion_live = 0.7 * self.motion_live + 0.3 * motion
+            self._acc_sum += motion
+            self._acc_n += 1
             self.cond.notify_all()
+
+    def start_meter(self):
+        """Begin adding up motion (call once the head has stopped moving)."""
+        with self.cond:
+            self._acc_sum, self._acc_n = 0.0, 0
+            self._prev_small = None   # don't count the jump from the old head position
+
+    def read_meter(self):
+        """Wave points since start_meter(): average moving fraction x 1000 (vigorous waving ~ 30-100)."""
+        with self.cond:
+            return round(1000 * self._acc_sum / self._acc_n) if self._acc_n else 0
+
+    def _measure_motion(self, img):
+        """How much of the picture changed since the last frame (waving hands, jumping...)."""
+        small = cv2.GaussianBlur(cv2.cvtColor(cv2.resize(img, (160, 120)), cv2.COLOR_BGR2GRAY), (5, 5), 0)
+        prev, self._prev_small = self._prev_small, small
+        if prev is None:
+            return 0.0, None
+        mask = cv2.absdiff(small, prev) > 22
+        frac = float(mask.mean())
+        if frac > 0.5:          # whole picture changed: head/robot moving or lights flicker, not waving
+            return 0.0, None
+        return frac, mask
+
+    def wave_power(self):
+        """Live wave power on the same scale as the scan score."""
+        return round(self.motion_live * 1000) if self.ok else 0
 
     # ---------- queries ----------
     @property
@@ -88,11 +126,22 @@ class Vision:
     def annotated_jpeg(self, wait=1.0):
         with self.cond:
             self.cond.wait(wait)
-            frame, faces = self.frame, list(self.faces)
+            frame, faces, mask = self.frame, list(self.faces), self.motion_mask
         if frame is None:
             return None
         img = frame.copy()
-        w = img.shape[1]
+        h, w = img.shape[:2]
+        if mask is not None and mask.any():
+            # light up whatever moved, in the color of the team zone it's in
+            big = cv2.resize(cv2.dilate(mask.astype(np.uint8), np.ones((3, 3), np.uint8)), (w, h),
+                             interpolation=cv2.INTER_NEAREST).astype(bool)
+            tint = np.zeros_like(img)
+            if self.tint_zone is not None:        # a team's turn: the whole view is theirs
+                tint[:] = ZONE_COLORS[self.tint_zone]
+            else:
+                for z, c in enumerate(ZONE_COLORS):
+                    tint[:, z * w // 3:(z + 1) * w // 3] = c
+            img[big] = (0.45 * img[big] + 0.55 * tint[big]).astype(np.uint8)
         for i, (x, y, fw, fh, _) in enumerate(faces, 1):
             zone = min(2, max(0, int((x + fw / 2) / (w / 3))))
             c = ZONE_COLORS[zone]

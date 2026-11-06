@@ -102,11 +102,19 @@
   .banner[data-tone="sad"] { background: var(--coral); }
   .banner[data-tone="stop"] { background: var(--white); }
 
-  .scanbeam {
-    position: absolute; top: 0; bottom: 0; width: 33.34%; pointer-events: none;
-    background: linear-gradient(180deg, rgba(255,201,60,.0), rgba(255,201,60,.22));
-    border: 4px solid var(--gold); border-radius: 18px; transition: left .4s ease; display: none;
-  }
+  .tv { transition: border-color .3s; }
+  .tv[data-zone="left"] { border-color: var(--coral); }
+  .tv[data-zone="center"] { border-color: var(--gold); }
+  .tv[data-zone="right"] { border-color: var(--mint); }
+  .tv[data-zone] .thirds { display: none; }
+
+  .meter { height: 12px; background: #3A438F; border-radius: 99px; overflow: hidden; margin-top: 8px; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--gold); border-radius: 99px; transition: width .12s linear; }
+  .counter .meter { width: 170px; }
+  .team .meter { margin-top: 12px; }
+  .team .meter i { background: var(--c); }
+  .team.scanning.waving { animation: shake .35s ease-in-out infinite; }
+  @keyframes shake { 0%,100% { transform: translateY(-6px) rotate(0); } 25% { transform: translateY(-6px) rotate(-1.2deg); } 75% { transform: translateY(-6px) rotate(1.2deg); } }
 
   /* ---------- teams ---------- */
   .teams { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 26px; }
@@ -204,20 +212,19 @@
 <header>
   <div class="brand">
     <h1>Face Hunt</h1>
-    <p>The robot walks toward whichever team it sees the most faces in. Get your whole team in its view!</p>
+    <p>The robot walks toward the team that waves the hardest. Wave, jump, dance: every move counts!</p>
   </div>
-  <div class="counter" aria-live="polite">
-    <div class="num" id="faceNum">0</div>
-    <div class="label"><b id="faceWord">faces</b>in view right now</div>
+  <div class="counter">
+    <div class="num" id="powerNum">0</div>
+    <div class="label"><b>Wave power</b>right now<div class="meter"><i id="powerBar"></i></div></div>
   </div>
 </header>
 
 <main>
   <section>
-    <div class="tv">
+    <div class="tv" id="tv">
       <img id="video" src="/video" alt="Live view from the robot's camera with faces boxed">
       <div class="thirds"><span></span><span></span><span></span></div>
-      <div class="scanbeam" id="beam"></div>
       <div class="nosignal" id="nosignal" hidden>
         <strong>No camera yet</strong>
         <span>Check that this laptop is on the robot's Wi-Fi and the robot is switched on.</span>
@@ -234,27 +241,30 @@
         <h2>Team Coral</h2>
         <p class="where">Stand on the robot's left</p>
         <div class="row">
-          <div class="seen"><span data-count>?</span><small>faces seen</small></div>
+          <div class="seen"><span data-count>?</span><small>wave points</small></div>
           <div class="wins"><div class="stars" data-stars></div><span data-wins>0 wins</span></div>
         </div>
+        <div class="meter"><i data-bar></i></div>
       </article>
       <article class="team" data-team="center">
         <div class="crown">Winner</div>
         <h2>Team Gold</h2>
         <p class="where">Stand right in front</p>
         <div class="row">
-          <div class="seen"><span data-count>?</span><small>faces seen</small></div>
+          <div class="seen"><span data-count>?</span><small>wave points</small></div>
           <div class="wins"><div class="stars" data-stars></div><span data-wins>0 wins</span></div>
         </div>
+        <div class="meter"><i data-bar></i></div>
       </article>
       <article class="team" data-team="right">
         <div class="crown">Winner</div>
         <h2>Team Mint</h2>
         <p class="where">Stand on the robot's right</p>
         <div class="row">
-          <div class="seen"><span data-count>?</span><small>faces seen</small></div>
+          <div class="seen"><span data-count>?</span><small>wave points</small></div>
           <div class="wins"><div class="stars" data-stars></div><span data-wins>0 wins</span></div>
         </div>
+        <div class="meter"><i data-bar></i></div>
       </article>
     </div>
   </section>
@@ -311,7 +321,6 @@
 <script>
 const $ = (s, el = document) => el.querySelector(s);
 const TEAM_NAME = { left: "Coral", center: "Gold", right: "Mint" };
-const BEAM_LEFT = { left: "0%", center: "33.33%", right: "66.66%" };
 
 /* ---------------- websocket ---------------- */
 let ws, last = {};
@@ -327,22 +336,24 @@ connect();
 const BANNERS = {
   idle:     s => ["Ready", s.message, "idle"],
   manual:   s => ["Driving", s.message, "idle"],
-  scanning: s => [`Looking ${s.scan_zone === "center" ? "ahead" : s.scan_zone || ""}`, "Wave and smile so it can see you!", "idle"],
+  scanning: s => s.phase === "wave"
+    ? [`Team ${TEAM_NAME[s.scan_zone]}: wave!`, `${(s.seconds_left ?? 0).toFixed(1)} seconds left`, "party"]
+    : [`Team ${TEAM_NAME[s.scan_zone] || ""}, get ready`, "Wave as hard as you can when it says go", "idle"],
   picked:   s => [`Team ${TEAM_NAME[s.winner]}!`, s.message, "party"],
   turning:  s => ["Turning", s.message, "idle"],
   walking:  s => ["Here I come!", s.message, "idle"],
-  party:    s => [`Team ${TEAM_NAME[s.winner]} wins!`, "Point to the winners!", "party"],
-  sad:      s => ["Nobody here?", s.message, "sad"],
+  party:    s => [`Team ${TEAM_NAME[s.winner]} wins!`, s.message, "party"],
+  sad:      s => ["Too quiet!", s.message, "sad"],
 };
 
 function render(s) {
   const prev = last; last = s;
 
-  // big face counter
-  const n = s.faces ?? 0;
-  $("#faceNum").textContent = n;
-  $("#faceWord").textContent = n === 1 ? "face" : "faces";
-  if (n > (prev.faces ?? 0)) { bump($("#faceNum")); if (s.state === "idle") sfx.tick(); }
+  // live wave power
+  const p = s.wave_power ?? 0;
+  $("#powerNum").textContent = p;
+  $("#powerBar").style.width = Math.min(100, p) + "%";
+  if (p >= 20) sfx.whoosh(p);
 
   // banner
   let [big, small, tone] = (BANNERS[s.state] || BANNERS.idle)(s);
@@ -355,16 +366,18 @@ function render(s) {
   $("#bannerSmall").textContent = small || "";
   banner.dataset.tone = tone;
 
-  // scan beam over the video
-  const beam = $("#beam");
-  beam.style.display = s.state === "scanning" && s.scan_zone ? "block" : "none";
-  if (s.scan_zone) beam.style.left = BEAM_LEFT[s.scan_zone];
+  // the TV takes the color of the team whose turn it is
+  if (s.state === "scanning" && s.scan_zone) $("#tv").dataset.zone = s.scan_zone;
+  else delete $("#tv").dataset.zone;
 
   // teams
   for (const el of document.querySelectorAll(".team")) {
     const t = el.dataset.team;
-    const c = s.zone_counts?.[t];
+    const c = s.zone_points?.[t];
+    const top = Math.max(60, ...Object.values(s.zone_points || {}).filter(v => v != null));
     $("[data-count]", el).textContent = c == null ? "?" : c;
+    $("[data-bar]", el).style.width = c == null ? "0%" : Math.min(100, 100 * c / top) + "%";
+    el.classList.toggle("waving", s.phase === "wave");
     const w = s.scores?.[t] ?? 0;
     $("[data-stars]", el).textContent = "★".repeat(Math.min(w, 12));
     $("[data-wins]", el).textContent = `${w} ${w === 1 ? "win" : "wins"}`;
@@ -388,6 +401,8 @@ function render(s) {
 
   // sound + confetti on state changes
   if (s.scan_zone && s.scan_zone !== prev.scan_zone) sfx.blip(s.scan_zone);
+  if (s.phase === "wave" && prev.phase !== "wave") sfx.go();
+  if (prev.phase === "wave" && s.phase !== "wave") sfx.buzzer();
   if (s.state !== prev.state) {
     if (s.state === "picked") sfx.fanfare();
     if (s.state === "party") { sfx.fanfare(); confetti(); }
@@ -448,7 +463,13 @@ const sfx = (() => {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       $("#pSound").textContent = "Sound on"; $("#pSound").classList.add("on");
     },
-    tick() { tone(1200, 0, 0.06, "triangle", 0.05); },
+    whoosh(power) {                       // pitch rises with wave power, at most ~6 per second
+      const now = performance.now();
+      if (now - (this._w || 0) < 160) return;
+      this._w = now; tone(260 + Math.min(power, 120) * 8, 0, 0.09, "triangle", 0.05);
+    },
+    go() { tone(880, 0, 0.12, "square", 0.08); tone(1320, 0.12, 0.3, "square", 0.08); },
+    buzzer() { tone(180, 0, 0.35, "sawtooth", 0.07); },
     blip(zone) { const f = { left: 520, center: 660, right: 780 }[zone] || 600; tone(f, 0, 0.12); tone(f * 1.5, 0.12, 0.12); },
     fanfare() { [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.11, 0.22, "square", 0.07)); tone(1047, 0.48, 0.5, "triangle", 0.08); },
     sad() { [392, 370, 349, 311].forEach((f, i) => tone(f, i * 0.28, 0.32, "sawtooth", 0.05)); },

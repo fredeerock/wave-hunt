@@ -1,11 +1,14 @@
 """Face Hunt game logic.
 
 One round:
-  1. SCAN    - head looks at robot's left, straight ahead, robot's right and counts faces
-  2. PICK    - the direction with the most faces wins (ties go to straight ahead)
+  1. SCAN    - head looks at each team in turn (robot's left, ahead, robot's right);
+               each team gets a few seconds to wave, jump and dance. The camera measures
+               how much of the picture moves: that's the team's "wave points".
+  2. PICK    - the team with the most wave points wins (ties go to straight ahead)
   3. TURN    - robot turns its body toward the winners
   4. WALK    - robot walks forward, steering toward the faces it sees
-  5. PARTY   - robot waves; the winning team gets a point
+               (faces, not motion: once the robot walks, everything in view moves)
+  5. PARTY   - robot waves back; the winning team gets a star
 """
 import logging
 import random
@@ -20,7 +23,9 @@ log = logging.getLogger("game")
 SETTINGS = {
     "scan_pan": 0.75,         # radians the head turns to look left/right (~43 deg)
     "head_tilt": 0.15,        # radians the head tilts up to see standing people
-    "scan_look_time": 1.5,    # seconds spent counting faces at each direction
+    "get_ready_time": 1.5,    # seconds of "get ready" after the head turns to a team
+    "wave_time": 3.0,         # seconds each team has to wave
+    "min_wave_points": 4,     # below this, nobody really waved
     "turn_angle": 8,          # degrees per step while turning (max 10)
     "turn_max_time": 6.0,     # seconds: longest the robot keeps turning
     "turn_min_time": 1.5,     # seconds: turn at least this long before checking the camera
@@ -44,7 +49,9 @@ class Game:
         self.state = "idle"
         self.message = "Press START to begin the hunt"
         self.scan_zone = None
-        self.zone_counts = {t: None for t in TEAMS}
+        self.phase = None          # "ready" or "wave" while scanning
+        self.phase_ends = 0.0
+        self.zone_points = {t: None for t in TEAMS}
         self.winner = None
         self.scores = {t: 0 for t in TEAMS}
         self.auto = False
@@ -116,7 +123,10 @@ class Game:
             "state": self.state,
             "message": self.message,
             "scan_zone": self.scan_zone,
-            "zone_counts": self.zone_counts,
+            "phase": self.phase,
+            "seconds_left": max(0.0, round(self.phase_ends - time.time(), 1)) if self.phase else None,
+            "zone_points": self.zone_points,
+            "wave_power": self.vision.wave_power(),
             "winner": self.winner,
             "scores": self.scores,
             "auto": self.auto,
@@ -172,37 +182,40 @@ class Game:
         S = SETTINGS
         self.round += 1
         self.winner = None
-        self.zone_counts = {t: None for t in TEAMS}
+        self.zone_points = {t: None for t in TEAMS}
 
-        # 1. SCAN
-        self._set("scanning", "Looking for humans...")
+        # 1. SCAN: each team gets its turn to wave
+        self._set("scanning", "Each team gets a turn to wave")
         pans = {"left": S["scan_pan"], "center": 0.0, "right": -S["scan_pan"]}
-        for team in TEAMS:
-            self.scan_zone = team
-            self.robot.head(pans[team], S["head_tilt"], duration=0.5)
-            self._wait(0.9)                                   # let the head settle
-            counts, t_end = [], time.time() + S["scan_look_time"]
-            while time.time() < t_end:
-                counts.append(self.vision.count())
-                self.zone_counts[team] = max(counts)          # live preview
-                self._wait(0.1)
-            counts.sort()
-            # 70th percentile: ignores one-frame false alarms, keeps real faces
-            self.zone_counts[team] = counts[int(len(counts) * 0.7)] if counts else 0
-        self.scan_zone = None
+        try:
+            for team in TEAMS:
+                self.scan_zone = team
+                self.vision.tint_zone = TEAMS.index(team)
+                self.robot.head(pans[team], S["head_tilt"], duration=0.5)
+                self.phase, self.phase_ends = "ready", time.time() + S["get_ready_time"]
+                self._wait(S["get_ready_time"])                  # head settles while the team gets ready
+                self.vision.start_meter()
+                self.phase, self.phase_ends = "wave", time.time() + S["wave_time"]
+                while time.time() < self.phase_ends:
+                    self.zone_points[team] = self.vision.read_meter()   # live score
+                    self._wait(0.1)
+                self.zone_points[team] = self.vision.read_meter()
+        finally:
+            self.scan_zone, self.phase = None, None
+            self.vision.tint_zone = None
         self.robot.head(0.0, S["head_tilt"], duration=0.5)
 
         # 2. PICK
-        best = max(self.zone_counts.values())
-        if best == 0:
-            self._set("sad", "No humans found. Wave at the robot and try again!")
+        best = max(self.zone_points.values())
+        if best < S["min_wave_points"]:
+            self._set("sad", "Nobody waved! Move those arms and try again")
             self._wait(2.5)
             self._set("idle", "Press START to begin the hunt")
             return
-        tied = [t for t in TEAMS if self.zone_counts[t] == best]
+        tied = [t for t in TEAMS if self.zone_points[t] == best]
         self.winner = "center" if "center" in tied else random.choice(tied)
-        self._set("picked", f"{best} face{'s' if best != 1 else ''}! Heading {self._where(self.winner)}")
-        self._wait(1.5)
+        self._set("picked", f"{best} wave points! Heading {self._where(self.winner)}")
+        self._wait(2)
 
         # 3. TURN
         if self.winner != "center":
@@ -235,7 +248,7 @@ class Game:
 
         # 5. PARTY
         self.scores[self.winner] += 1
-        self._set("party", f"Team {self.winner.upper()} wins this round!")
+        self._set("party", f"Team {self.winner.upper()} waved the hardest!")
         self.robot.action("wave")
         self._wait(4)
         self._set("idle", "Press START for another round")
