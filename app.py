@@ -1,4 +1,4 @@
-"""Face Hunt web app.  Run:  uv run app.py   then open http://localhost:8000"""
+"""Wave Hunt web app.  Run:  uv run app.py   then open http://localhost:8000"""
 import argparse
 import asyncio
 import json
@@ -117,7 +117,7 @@ async def ws(sock: WebSocket):
 
 if __name__ == "__main__":
     url = f"http://localhost:{args.port}"
-    print(f"\n  Face Hunt is running:  {url}\n  Robot: {args.robot}   (Ctrl+C to quit)\n")
+    print(f"\n  Wave Hunt is running:  {url}\n  Robot: {args.robot}   (Ctrl+C to quit)\n")
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
     try:

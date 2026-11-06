@@ -1,7 +1,7 @@
 [project]
-name = "face-hunt"
+name = "wave-hunt"
 version = "0.1.0"
-description = "Face Hunt: the AiNex robot walks toward the team with the most faces"
+description = "Wave Hunt: the AiNex robot walks toward the team that waves the hardest"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110",

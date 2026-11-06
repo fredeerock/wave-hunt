@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Face Hunt</title>
+<title>Wave Hunt</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -211,7 +211,7 @@
 
 <header>
   <div class="brand">
-    <h1>Face Hunt</h1>
+    <h1>Wave Hunt</h1>
     <p>The robot walks toward the team that waves the hardest. Wave, jump, dance: every move counts!</p>
   </div>
   <div class="counter">
@@ -357,7 +357,7 @@ function render(s) {
 
   // banner
   let [big, small, tone] = (BANNERS[s.state] || BANNERS.idle)(s);
-  if (s._offline) [big, small, tone] = ["Offline", "The Face Hunt server isn't running. Start it with: uv run app.py", "sad"];
+  if (s._offline) [big, small, tone] = ["Offline", "The Wave Hunt server isn't running. Start it with: uv run app.py", "sad"];
   else if (!s.robot) [big, small, tone] = ["Robot offline", "Join the robot's Wi-Fi and make sure the robot is on", "sad"];
   if (s.state === "idle" && /^Stopped/.test(s.message || "")) tone = "stop";
   const banner = $("#banner");

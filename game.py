@@ -1,4 +1,4 @@
-"""Face Hunt game logic.
+"""Wave Hunt game logic.
 
 One round:
   1. SCAN    - head looks at each team in turn (robot's left, ahead, robot's right);

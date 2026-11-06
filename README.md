@@ -1,4 +1,4 @@
-# Face Hunt
+# Wave Hunt
 
 Three teams compete to attract the AiNex robot. It turns its head to each team in turn,
 and that team has a few seconds to wave, jump and dance. The camera measures how much
